@@ -1,0 +1,26 @@
+RECHNUNG
+
+Rechnungsnummer: INV-2024-001247
+Rechnungsdatum: 15.03.2024
+Fälligkeitsdatum: 15.04.2024
+
+Lieferant:
+Mustermann Beratung AG
+Bahnhofstrasse 12
+8001 Zürich
+Schweiz
+UID: CHE-123.456.789
+MWST-Nr.: CHE-123.456.789 MWST
+IBAN: CH56 0483 5012 3456 7800 9
+
+Pos.  Beschreibung                 Menge  Preis CHF   Total CHF
+1     Strategieberatung Q1 2024    10.0h  250.00      2'500.00
+2     Reisespesen                  1      150.00        150.00
+3     Softwarelizenz (jährlich)    1      800.00        800.00
+
+Zwischensumme CHF:                                   3'450.00
+MWST 8.1%:                                             279.45
+Gesamtbetrag CHF:                                    3'729.45
+
+Zahlungsbedingungen: 30 Tage netto
+QR-Referenz: 21 00000 00003 13947 14300 09017

@@ -1,0 +1,14 @@
+INVOICE
+
+Invoice Number: INV-EN-2024-0055
+Invoice Date: 22.03.2024
+
+Vendor: TechSolutions Ltd.
+London, UK
+
+Total: GBP 3840.00
+VAT 20%: GBP 640.00
+Payment Terms: 60 days net
+
+-- Intentional compliance issues for testing:
+   No Swiss UID, no IBAN, currency GBP, VAT 20% (invalid Swiss rate), no QR reference, no due date

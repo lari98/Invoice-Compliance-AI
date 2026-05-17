@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swiss Invoice Compliance AI</title>
+<style>
+  :root {
+    --bg: #0f1117; --card: #1a1d27; --card2: #222638; --border: #2e3250;
+    --accent: #4f7cff; --accent2: #7c5cfc; --green: #22c55e; --red: #ef4444;
+    --yellow: #f59e0b; --text: #e2e8f0; --muted: #8892b0; --white: #fff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  /* NAV */
+  nav { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 2rem;
+        display: flex; align-items: center; gap: 2rem; height: 60px; position: sticky; top: 0; z-index: 100; }
+  nav .logo { font-weight: 700; font-size: 1.1rem; color: var(--white);
+              display: flex; align-items: center; gap: .5rem; }
+  nav .logo span { background: linear-gradient(135deg,var(--accent),var(--accent2));
+                   -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  nav a { color: var(--muted); text-decoration: none; font-size: .9rem; padding: .4rem .8rem;
+          border-radius: 6px; transition: .2s; cursor: pointer; }
+  nav a:hover, nav a.active { color: var(--white); background: var(--card2); }
+  nav .server-status { margin-left: auto; display: flex; align-items: center; gap: .5rem;
+                       font-size: .8rem; color: var(--muted); }
+  nav .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+  nav .dot.ok { background: var(--green); }
+
+  /* PAGES */
+  .page { display: none; padding: 2rem; max-width: 1200px; margin: 0 auto; }
+  .page.active { display: block; }
+
+  /* UPLOAD ZONE */
+  .upload-zone { border: 2px dashed var(--border); border-radius: 16px; padding: 3rem;
+                 text-align: center; transition: .3s; cursor: pointer; background: var(--card); }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(79,124,255,.05); }
+  .upload-zone .icon { font-size: 3rem; margin-bottom: 1rem; }
+  .upload-zone h2 { color: var(--white); margin-bottom: .5rem; }
+  .upload-zone p { color: var(--muted); font-size: .9rem; }
+  .upload-zone .filetypes { margin-top: 1rem; display: flex; gap: .5rem; justify-content: center; flex-wrap: wrap; }
+  .badge { background: var(--card2); border: 1px solid var(--border); border-radius: 6px;
+           padding: .2rem .6rem; font-size: .75rem; color: var(--muted); }
+  #fileInput { display: none; }
+
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; gap: .4rem; padding: .6rem 1.2rem;
+         border-radius: 8px; border: none; cursor: pointer; font-size: .9rem;
+         font-weight: 500; transition: .2s; }
+  .btn-primary { background: var(--accent); color: var(--white); }
+  .btn-primary:hover { background: #3d6ce8; }
+  .btn-success { background: var(--green); color: var(--white); }
+  .btn-danger  { background: var(--red);   color: var(--white); }
+  .btn-outline { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn-outline:hover { color: var(--white); border-color: var(--accent); }
+
+  /* CARDS */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+  .card h3 { color: var(--white); margin-bottom: 1rem; font-size: 1rem; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .grid3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 1.5rem; }
+  .grid4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 1rem; }
+  @media(max-width:768px) { .grid2,.grid3,.grid4 { grid-template-columns:1fr; } }
+
+  /* KPI CARDS */
+  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+         padding: 1.2rem; }
+  .kpi .label { color: var(--muted); font-size: .8rem; margin-bottom: .3rem; }
+  .kpi .value { font-size: 2rem; font-weight: 700; color: var(--white); }
+  .kpi .sub   { font-size: .8rem; color: var(--muted); margin-top: .2rem; }
+
+  /* STATUS BADGES */
+  .status { display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .7rem;
+            border-radius: 999px; font-size: .75rem; font-weight: 600; }
+  .status.pass    { background: rgba(34,197,94,.15);  color: var(--green); }
+  .status.fail    { background: rgba(239,68,68,.15);  color: var(--red); }
+  .status.warning { background: rgba(245,158,11,.15); color: var(--yellow); }
+  .status.unknown { background: rgba(136,146,176,.15);color: var(--muted); }
+
+  /* RISK BADGES */
+  .risk-low      { color: var(--green); }
+  .risk-medium   { color: var(--yellow); }
+  .risk-high     { color: #f97316; }
+  .risk-critical { color: var(--red); }
+
+  /* PROGRESS */
+  .score-bar { background: var(--border); border-radius: 999px; height: 8px; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 999px; transition: width .6s ease; }
+
+  /* TABLE */
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th { color: var(--muted); font-weight: 500; text-align: left; padding: .6rem 1rem;
+       border-bottom: 1px solid var(--border); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+  td { padding: .8rem 1rem; border-bottom: 1px solid var(--border); color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  .clickable { cursor: pointer; }
+
+  /* FIELD GRID */
+  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+  .field-item .label { font-size: .75rem; color: var(--muted); margin-bottom: .2rem; }
+  .field-item .val   { font-size: .9rem; color: var(--white); word-break: break-all; }
+  .field-item .val.empty { color: var(--border); font-style: italic; }
+
+  /* RULE LIST */
+  .rule-item { display: flex; align-items: flex-start; gap: .8rem; padding: .7rem 0;
+               border-bottom: 1px solid var(--border); }
+  .rule-item:last-child { border-bottom: none; }
+  .rule-icon { font-size: 1rem; margin-top: .1rem; flex-shrink: 0; }
+  .rule-name { font-size: .88rem; color: var(--white); font-weight: 500; }
+  .rule-msg  { font-size: .8rem; color: var(--muted); margin-top: .2rem; }
+
+  /* ANOMALY FLAGS */
+  .flag-item { background: var(--card2); border-radius: 8px; padding: 1rem; margin-bottom: .7rem;
+               border-left: 3px solid var(--red); }
+  .flag-item.medium { border-color: var(--yellow); }
+  .flag-item.low    { border-color: var(--muted); }
+  .flag-type { font-size: .75rem; font-weight: 700; letter-spacing: .05em; color: var(--muted);
+               text-transform: uppercase; margin-bottom: .3rem; }
+  .flag-desc { font-size: .88rem; color: var(--text); margin-bottom: .3rem; }
+  .flag-action { font-size: .8rem; color: var(--accent); }
+
+  /* OCR TEXT */
+  .ocr-text { background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+              padding: 1rem; font-family: monospace; font-size: .8rem; color: var(--muted);
+              max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+
+  /* TOAST */
+  #toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--card);
+           border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.5rem;
+           font-size: .9rem; color: var(--text); display: none; z-index: 999;
+           box-shadow: 0 8px 32px rgba(0,0,0,.4); max-width: 320px; }
+  #toast.show { display: block; animation: slideIn .3s ease; }
+  #toast.error { border-color: var(--red); }
+  #toast.success { border-color: var(--green); }
+  @keyframes slideIn { from { transform: translateY(20px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+
+  /* LOADER */
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border);
+             border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6);
+                     display: flex; align-items: center; justify-content: center;
+                     z-index: 500; display: none; }
+  .loading-overlay.show { display: flex; }
+  .loading-box { background: var(--card); border-radius: 12px; padding: 2rem 3rem;
+                 text-align: center; }
+  .loading-box p { color: var(--muted); margin-top: .8rem; font-size: .9rem; }
+
+  /* MISC */
+  .section-header { display: flex; align-items: center; justify-content: space-between;
+                    margin-bottom: 1.5rem; }
+  .section-header h1 { font-size: 1.4rem; color: var(--white); }
+  .empty-state { text-align: center; padding: 3rem; color: var(--muted); }
+  .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+  .back-btn { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted);
+              cursor: pointer; font-size: .88rem; margin-bottom: 1.5rem; }
+  .back-btn:hover { color: var(--white); }
+  .tabs { display: flex; gap: .3rem; margin-bottom: 1.5rem; }
+  .tab { padding: .5rem 1rem; border-radius: 8px; cursor: pointer; font-size: .88rem;
+         color: var(--muted); transition: .2s; }
+  .tab:hover { color: var(--white); background: var(--card2); }
+  .tab.active { color: var(--white); background: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">🇨🇭 <span>Swiss Invoice AI</span></div>
+  <a onclick="showPage('upload')" id="nav-upload" class="active">Upload</a>
+  <a onclick="showPage('invoices')" id="nav-invoices">Invoices</a>
+  <a onclick="showPage('dashboard')" id="nav-dashboard">Dashboard</a>
+  <a onclick="showPage('exports')" id="nav-exports">Exports</a>
+  <div class="server-status">
+    <div class="dot" id="serverDot"></div>
+    <span id="serverText">Connecting...</span>
+  </div>
+</nav>
+
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-box">
+    <div class="spinner" style="width:40px;height:40px;border-width:3px;margin:auto"></div>
+    <p id="loadingText">Processing invoice...</p>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- ═══════════════════ PAGE: UPLOAD ═══════════════════ -->
+<div class="page active" id="page-upload">
+  <div style="max-width:700px;margin:0 auto;">
+    <div class="section-header" style="margin-bottom:2rem;">
+      <div>
+        <h1 style="color:var(--white);font-size:1.6rem;">Upload Invoice</h1>
+        <p style="color:var(--muted);font-size:.9rem;margin-top:.3rem;">OCR extraction · Compliance check · Fraud detection</p>
+      </div>
+    </div>
+
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+      <div class="icon">📄</div>
+      <h2>Drop your invoice here</h2>
+      <p>or click to browse</p>
+      <div class="filetypes">
+        <span class="badge">PDF</span><span class="badge">JPG</span><span class="badge">JPEG</span>
+        <span class="badge">PNG</span><span class="badge">TXT</span><span class="badge">HTML</span>
+        <span class="badge">XLSX</span><span class="badge">XLS</span>
+      </div>
+    </div>
+    <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png,.txt,.html,.xlsx,.xls">
+
+    <div id="uploadResult" style="margin-top:1.5rem;display:none;"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ PAGE: INVOICES ═══════════════════ -->
+<div class="page" id="page-invoices">
+  <div class="section-header">
+    <h1>All Invoices</h1>
+    <button class="btn btn-primary" onclick="loadInvoices()">🔄 Refresh</button>
+  </div>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>Filename</th><th>Vendor</th><th>Amount</th>
+          <th>Currency</th><th>Date</th><th>Compliance</th><th>Anomaly</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="invoiceTableBody">
+        <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════ PAGE: DETAIL ═══════════════════ -->
+<div class="page" id="page-detail">
+  <div class="back-btn" onclick="showPage('invoices')">← Back to Invoices</div>
+  <div id="detailContent"></div>
+</div>
+
+<!-- ═══════════════════ PAGE: DASHBOARD ═══════════════════ -->
+<div class="page" id="page-dashboard">
+  <div class="section-header">
+    <h1>Dashboard</h1>
+    <button class="btn btn-outline" onclick="loadDashboard()">🔄 Refresh</button>
+  </div>
+  <div class="grid4" id="kpiGrid" style="margin-bottom:1.5rem;">
+    <div class="kpi"><div class="label">Total Invoices</div><div class="value" id="kpi-total">—</div></div>
+    <div class="kpi"><div class="label">Compliant</div><div class="value" id="kpi-pass" style="color:var(--green)">—</div></div>
+    <div class="kpi"><div class="label">Non-Compliant</div><div class="value" id="kpi-fail" style="color:var(--red)">—</div></div>
+    <div class="kpi"><div class="label">Total Amount</div><div class="value" id="kpi-amount" style="font-size:1.2rem">—</div><div class="sub">CHF</div></div>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h3>By Compliance Status</h3>
+      <div id="byCompliance"></div>
+    </div>
+    <div class="card">
+      <h3>Top Vendors</h3>
+      <div id="topVendors"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ PAGE: EXPORTS ═══════════════════ -->
+<div class="page" id="page-exports">
+  <div class="section-header"><h1>Export Data</h1></div>
+  <div class="grid3">
+    <div class="card" style="text-align:center;">
+      <div style="font-size:3rem;margin-bottom:1rem;">📊</div>
+      <h3>Excel Report</h3>
+      <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.5rem;">4 sheets: Summary, Invoices, Line Items, Compliance Results. Colour-coded status.</p>
+      <button class="btn btn-success" onclick="doExport('excel')">Download Excel</button>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div style="font-size:3rem;margin-bottom:1rem;">🏭</div>
+      <h3>SAP CSV</h3>
+      <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.5rem;">BAPI_INCOMINGINVOICE_CREATE compatible. Semicolon-delimited for direct SAP FI import.</p>
+      <button class="btn btn-primary" onclick="doExport('sap-csv')">Download SAP CSV</button>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div style="font-size:3rem;margin-bottom:1rem;">📈</div>
+      <h3>Power BI JSON</h3>
+      <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.5rem;">Denormalised payload with invoice + compliance + line items. Schema versioned.</p>
+      <button class="btn btn-outline" onclick="doExport('powerbi-json')">Download JSON</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+const API = 'http://localhost:8000';
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function toast(msg, type='info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'show ' + type;
+  clearTimeout(el._t); el._t = setTimeout(()=>el.className='', 3500);
+}
+function loading(show, text='Processing invoice...') {
+  document.getElementById('loadingOverlay').className = show ? 'loading-overlay show' : 'loading-overlay';
+  document.getElementById('loadingText').textContent = text;
+}
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  const nav = document.getElementById('nav-' + name);
+  if (nav) nav.classList.add('active');
+  if (name === 'invoices') loadInvoices();
+  if (name === 'dashboard') loadDashboard();
+}
+function statusBadge(s) {
+  if (!s) return '<span class="status unknown">—</span>';
+  const map = {pass:'✓ Pass', fail:'✗ Fail', warning:'⚠ Warning', compliant:'✓ Compliant',
+               non_compliant:'✗ Non-Compliant', unknown:'? Unknown'};
+  const label = map[s.toLowerCase()] || s;
+  const cls = s.toLowerCase().includes('fail')||s.toLowerCase().includes('non') ? 'fail'
+            : s.toLowerCase().includes('warn') ? 'warning'
+            : s.toLowerCase().includes('pass')||s.toLowerCase().includes('compliant') ? 'pass' : 'unknown';
+  return `<span class="status ${cls}">${label}</span>`;
+}
+function riskBadge(level, score) {
+  const cls = `risk-${level||'low'}`;
+  return `<span class="${cls}" style="font-weight:700">${score}/100 — ${(level||'low').toUpperCase()}</span>`;
+}
+function scoreColor(s) {
+  if (s >= 70) return 'var(--red)';
+  if (s >= 40) return '#f97316';
+  if (s >= 20) return 'var(--yellow)';
+  return 'var(--green)';
+}
+function fmt(v, prefix='') { return v != null ? prefix + Number(v).toLocaleString('de-CH',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'; }
+
+// ── Server health ─────────────────────────────────────────────────────────────
+async function checkServer() {
+  try {
+    const r = await fetch(API + '/health');
+    if (r.ok) {
+      document.getElementById('serverDot').className = 'dot ok';
+      document.getElementById('serverText').textContent = 'Server online';
+    } else throw new Error();
+  } catch {
+    document.getElementById('serverDot').className = 'dot';
+    document.getElementById('serverText').textContent = 'Server offline — start with: python run.py';
+  }
+}
+
+// ── Upload ────────────────────────────────────────────────────────────────────
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag');
+  const f = e.dataTransfer.files[0]; if (f) uploadFile(f); });
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) uploadFile(e.target.files[0]);
+});
+
+async function uploadFile(file) {
+  const allowed = ['pdf','jpg','jpeg','png','txt','html','xlsx','xls'];
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!allowed.includes(ext)) { toast('Unsupported file type: ' + ext, 'error'); return; }
+
+  loading(true, 'Uploading & running OCR...');
+  const form = new FormData(); form.append('file', file);
+  try {
+    const r = await fetch(API + '/invoices/upload', { method:'POST', body:form });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'Upload failed');
+    loading(false);
+    toast('Invoice processed successfully!', 'success');
+    showInvoiceResult(data.invoice_id);
+  } catch(e) {
+    loading(false);
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+async function showInvoiceResult(id) {
+  loading(true, 'Loading results...');
+  try {
+    const [invR, compR, anomR] = await Promise.all([
+      fetch(API + '/invoices/' + id).then(r=>r.json()),
+      fetch(API + '/compliance/' + id).then(r=>r.json()),
+      fetch(API + '/invoices/' + id + '/anomalies').then(r=>r.json()),
+    ]);
+    loading(false);
+    renderUploadResult(invR, compR, anomR);
+  } catch(e) { loading(false); toast('Could not load results: ' + e.message, 'error'); }
+}
+
+function renderUploadResult(inv, comp, anom) {
+  const el = document.getElementById('uploadResult');
+  el.style.display = 'block';
+
+  const passCount = comp.results?.filter(r=>r.status==='pass').length || 0;
+  const failCount = comp.results?.filter(r=>r.status==='fail').length || 0;
+  const warnCount = comp.results?.filter(r=>r.status==='warning').length || 0;
+  const total = comp.total_checks || 0;
+  const pct = total ? Math.round(passCount/total*100) : 0;
+  const sc = anom.anomaly_score || 0;
+
+  el.innerHTML = `
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <h2 style="color:var(--white);">📋 ${inv.original_filename}</h2>
+    <button class="btn btn-outline" onclick="showDetailPage(${inv.id})">View Full Detail →</button>
+  </div>
+
+  <div class="grid3" style="margin-bottom:1.5rem;">
+    <div class="kpi"><div class="label">Compliance Score</div>
+      <div class="value" style="color:${pct>=80?'var(--green)':pct>=50?'var(--yellow)':'var(--red)'}">${pct}%</div>
+      <div class="sub">${passCount} pass · ${warnCount} warn · ${failCount} fail</div></div>
+    <div class="kpi"><div class="label">Anomaly Score</div>
+      <div class="value" style="color:${scoreColor(sc)}">${sc}/100</div>
+      <div class="sub">Risk: ${anom.risk_level||'low'}</div></div>
+    <div class="kpi"><div class="label">Total Amount</div>
+      <div class="value" style="font-size:1.3rem">${fmt(inv.total_amount)}</div>
+      <div class="sub">${inv.currency||'—'}</div></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab(this,'tab-fields')">Extracted Fields</div>
+    <div class="tab" onclick="switchTab(this,'tab-compliance')">Compliance (${total})</div>
+    <div class="tab" onclick="switchTab(this,'tab-anomaly')">Anomaly Flags (${anom.flags?.length||0})</div>
+    <div class="tab" onclick="switchTab(this,'tab-ocr')">Raw OCR</div>
+  </div>
+
+  <div class="tab-panel active" id="tab-fields">
+    <div class="card">${renderFields(inv)}</div>
+  </div>
+  <div class="tab-panel" id="tab-compliance">
+    <div class="card">${renderCompliance(comp.results||[])}</div>
+  </div>
+  <div class="tab-panel" id="tab-anomaly">
+    <div class="card">${renderAnomalyFlags(anom)}</div>
+  </div>
+  <div class="tab-panel" id="tab-ocr">
+    <div class="card">
+      <div class="ocr-text">${inv.raw_text ? escHtml(inv.raw_text) : 'No OCR text available.'}</div>
+    </div>
+  </div>`;
+}
+
+function switchTab(el, targetId) {
+  el.closest('.page,.card,.upload-zone,#uploadResult').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.closest('.page,.card,.upload-zone,#uploadResult').querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(targetId).classList.add('active');
+}
+</script>
+
+<script>
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function renderFields(inv) {
+  const fields = [
+    ['Invoice Number', inv.invoice_number], ['Vendor Name', inv.vendor_name],
+    ['Vendor Country', inv.vendor_country], ['Language', inv.language],
+    ['Invoice Date', inv.invoice_date], ['Due Date', inv.due_date],
+    ['Currency', inv.currency], ['Total Amount', fmt(inv.total_amount)],
+    ['Tax Amount', fmt(inv.tax_amount)], ['Tax Rate', inv.tax_rate_percent ? inv.tax_rate_percent + '%' : null],
+    ['Swiss UID', inv.swiss_uid], ['VAT Number', inv.vat_number],
+    ['IBAN', inv.iban], ['QR Reference', inv.qr_reference],
+    ['Payment Terms', inv.payment_terms], ['Confidence', inv.extraction_confidence ? Math.round(inv.extraction_confidence*100)+'%' : null],
+  ];
+  return '<div class="field-grid">' + fields.map(([k,v]) =>
+    `<div class="field-item"><div class="label">${k}</div><div class="val ${v?'':'empty'}">${v||'Not found'}</div></div>`
+  ).join('') + '</div>';
+}
+
+function renderCompliance(results) {
+  if (!results.length) return '<p style="color:var(--muted)">No compliance results.</p>';
+  const icons = { pass:'✅', fail:'❌', warning:'⚠️', unknown:'❓' };
+  return results.map(r => `
+    <div class="rule-item">
+      <div class="rule-icon">${icons[r.status]||'❓'}</div>
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:.5rem;">
+          <span class="rule-name">${r.rule_name||r.rule_id}</span>
+          ${statusBadge(r.status)}
+          <span class="badge" style="font-size:.7rem">${r.category||''}</span>
+        </div>
+        <div class="rule-msg">${r.message||''}</div>
+        ${r.actual_value ? `<div style="font-size:.75rem;color:var(--muted);margin-top:.2rem">Found: <code style="color:var(--text)">${r.actual_value}</code></div>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+function renderAnomalyFlags(anom) {
+  const sc = anom.anomaly_score || 0;
+  const severityColor = {'critical':'var(--red)','high':'#f97316','medium':'var(--yellow)','low':'var(--muted)'};
+  let html = `
+    <div style="display:flex;align-items:center;gap:1.5rem;margin-bottom:1.5rem;">
+      <div>
+        <div style="font-size:2.5rem;font-weight:700;color:${scoreColor(sc)}">${sc}</div>
+        <div style="font-size:.8rem;color:var(--muted)">Anomaly Score</div>
+      </div>
+      <div style="flex:1">
+        <div style="display:flex;justify-content:space-between;margin-bottom:.4rem;">
+          <span style="font-size:.85rem;color:var(--muted)">Risk Level</span>
+          <span style="font-weight:600;color:${scoreColor(sc)}">${(anom.risk_level||'low').toUpperCase()}</span>
+        </div>
+        <div class="score-bar"><div class="score-fill" style="width:${sc}%;background:${scoreColor(sc)}"></div></div>
+      </div>
+    </div>`;
+  if (!anom.flags?.length) {
+    html += '<div style="text-align:center;color:var(--green);padding:1rem">✅ No anomalies detected</div>';
+  } else {
+    html += anom.flags.map(f => `
+      <div class="flag-item ${f.severity}">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="flag-type">${f.anomaly_type.replace(/_/g,' ')}</div>
+          <span style="font-size:.75rem;font-weight:700;color:${severityColor[f.severity]||'var(--muted)'}">${f.severity?.toUpperCase()} +${f.score_contribution}</span>
+        </div>
+        <div class="flag-desc">${f.description||''}</div>
+        <div class="flag-action">💡 ${f.recommended_action||''}</div>
+      </div>`).join('');
+  }
+  return html;
+}
+
+// ── Invoice list ──────────────────────────────────────────────────────────────
+async function loadInvoices() {
+  const tbody = document.getElementById('invoiceTableBody');
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem;"><div class="spinner" style="margin:auto"></div></td></tr>';
+  try {
+    const data = await fetch(API + '/invoices/?limit=100').then(r=>r.json());
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem;">No invoices yet. Upload one!</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(inv => {
+      const sc = inv.anomaly_score || 0;
+      const riskIcon = sc>=70?'🔴':sc>=40?'🟠':sc>=20?'🟡':'🟢';
+      return `<tr class="clickable" onclick="showDetailPage(${inv.id})">
+        <td style="color:var(--muted)">#${inv.id}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${inv.original_filename}</td>
+        <td>${inv.vendor_name||'<span style="color:var(--muted)">—</span>'}</td>
+        <td>${fmt(inv.total_amount)}</td>
+        <td>${inv.currency||'—'}</td>
+        <td>${inv.invoice_date||'—'}</td>
+        <td>${statusBadge(inv.overall_compliance_status)}</td>
+        <td>${riskIcon} ${sc}</td>
+        <td><button class="btn btn-danger" style="padding:.3rem .7rem;font-size:.8rem" onclick="deleteInvoice(event,${inv.id})">🗑</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) { tbody.innerHTML = `<tr><td colspan="9" style="color:var(--red);padding:1rem">Error: ${e.message}</td></tr>`; }
+}
+
+async function deleteInvoice(e, id) {
+  e.stopPropagation();
+  if (!confirm('Delete invoice #' + id + '?')) return;
+  try {
+    await fetch(API + '/invoices/' + id, { method: 'DELETE' });
+    toast('Invoice deleted', 'success');
+    loadInvoices();
+  } catch(ex) { toast('Delete failed', 'error'); }
+}
+
+// ── Detail page ───────────────────────────────────────────────────────────────
+async function showDetailPage(id) {
+  showPage('detail');
+  document.getElementById('detailContent').innerHTML = '<div style="text-align:center;padding:3rem"><div class="spinner" style="margin:auto;width:40px;height:40px;border-width:3px"></div></div>';
+  try {
+    const [invR, compR, anomR] = await Promise.all([
+      fetch(API + '/invoices/' + id).then(r=>r.json()),
+      fetch(API + '/compliance/' + id).then(r=>r.json()),
+      fetch(API + '/invoices/' + id + '/anomalies').then(r=>r.json()),
+    ]);
+    const passCount = compR.results?.filter(r=>r.status==='pass').length||0;
+    const failCount = compR.results?.filter(r=>r.status==='fail').length||0;
+    const warnCount = compR.results?.filter(r=>r.status==='warning').length||0;
+    const total = compR.total_checks||0;
+    const pct = total ? Math.round(passCount/total*100) : 0;
+    const sc = anomR.anomaly_score||0;
+
+    document.getElementById('detailContent').innerHTML = `
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
+        <div>
+          <h1 style="color:var(--white);font-size:1.4rem">${invR.original_filename}</h1>
+          <p style="color:var(--muted);font-size:.85rem;margin-top:.3rem">Invoice #${id} · ${invR.invoice_date||'No date'} · ${invR.language||'unknown'} · ${invR.ocr_engine_used||'mock'}</p>
+        </div>
+        <div style="display:flex;gap:.7rem;flex-wrap:wrap">
+          <button class="btn btn-outline" onclick="reprocessInvoice(${id})">🔄 Reprocess</button>
+          <button class="btn btn-danger" onclick="deleteAndGoBack(${id})">🗑 Delete</button>
+        </div>
+      </div>
+
+      <div class="grid4" style="margin-bottom:1.5rem;">
+        <div class="kpi"><div class="label">Compliance</div>
+          <div class="value" style="color:${pct>=80?'var(--green)':pct>=50?'var(--yellow)':'var(--red)'}">${pct}%</div>
+          <div class="sub">${passCount}✓ ${warnCount}⚠ ${failCount}✗</div></div>
+        <div class="kpi"><div class="label">Anomaly Score</div>
+          <div class="value" style="color:${scoreColor(sc)}">${sc}/100</div>
+          <div class="sub">${anomR.risk_level||'low'} risk · ${anomR.flags?.length||0} flags</div></div>
+        <div class="kpi"><div class="label">Total Amount</div>
+          <div class="value" style="font-size:1.2rem">${fmt(invR.total_amount)}</div>
+          <div class="sub">${invR.currency||'—'}</div></div>
+        <div class="kpi"><div class="label">Tax</div>
+          <div class="value" style="font-size:1.2rem">${fmt(invR.tax_amount)}</div>
+          <div class="sub">${invR.tax_rate_percent ? invR.tax_rate_percent + '%' : '—'}</div></div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" onclick="switchTabDetail(this,'dtab-fields')">Fields</div>
+        <div class="tab" onclick="switchTabDetail(this,'dtab-compliance')">Compliance (${total})</div>
+        <div class="tab" onclick="switchTabDetail(this,'dtab-anomaly')">Anomaly (${anomR.flags?.length||0})</div>
+        <div class="tab" onclick="switchTabDetail(this,'dtab-ocr')">Raw OCR</div>
+      </div>
+      <div class="tab-panel active" id="dtab-fields"><div class="card">${renderFields(invR)}</div></div>
+      <div class="tab-panel" id="dtab-compliance"><div class="card">${renderCompliance(compR.results||[])}</div></div>
+      <div class="tab-panel" id="dtab-anomaly"><div class="card">${renderAnomalyFlags(anomR)}</div></div>
+      <div class="tab-panel" id="dtab-ocr"><div class="card">
+        <div class="ocr-text">${invR.raw_text ? escHtml(invR.raw_text) : 'No OCR text available.'}</div>
+      </div></div>`;
+  } catch(e) { document.getElementById('detailContent').innerHTML = `<p style="color:var(--red)">Error: ${e.message}</p>`; }
+}
+
+function switchTabDetail(el, targetId) {
+  document.querySelectorAll('#page-detail .tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('#page-detail .tab-panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(targetId).classList.add('active');
+}
+
+async function reprocessInvoice(id) {
+  loading(true, 'Reprocessing...');
+  try {
+    await fetch(API + '/invoices/' + id + '/reprocess', { method:'POST' });
+    loading(false); toast('Reprocessed', 'success'); showDetailPage(id);
+  } catch(e) { loading(false); toast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteAndGoBack(id) {
+  if (!confirm('Delete invoice #' + id + '?')) return;
+  await fetch(API + '/invoices/' + id, { method:'DELETE' });
+  toast('Deleted', 'success'); showPage('invoices');
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const data = await fetch(API + '/dashboard/stats').then(r=>r.json());
+    document.getElementById('kpi-total').textContent = data.total_invoices || 0;
+    const bc = data.by_compliance || {};
+    const pass = (bc.pass||0)+(bc.compliant||0);
+    const fail = (bc.fail||0)+(bc.non_compliant||0);
+    document.getElementById('kpi-pass').textContent = pass;
+    document.getElementById('kpi-fail').textContent = fail;
+    document.getElementById('kpi-amount').textContent = data.total_amount_chf ? fmt(data.total_amount_chf) : '—';
+
+    const byComp = document.getElementById('byCompliance');
+    byComp.innerHTML = Object.entries(bc).map(([k,v]) =>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--border)">
+        ${statusBadge(k)} <strong>${v}</strong></div>`).join('') || '<p style="color:var(--muted)">No data</p>';
+
+    const vendors = await fetch(API + '/dashboard/vendors').then(r=>r.json());
+    const vendorEl = document.getElementById('topVendors');
+    vendorEl.innerHTML = (vendors||[]).slice(0,8).map(v =>
+      `<div style="display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--text)">${v.vendor_name||'Unknown'}</span>
+        <span style="color:var(--muted)">${v.invoice_count} invoice${v.invoice_count!=1?'s':''}</span>
+      </div>`).join('') || '<p style="color:var(--muted)">No vendors yet</p>';
+  } catch(e) { toast('Dashboard error: ' + e.message, 'error'); }
+}
+
+// ── Exports ───────────────────────────────────────────────────────────────────
+async function doExport(type) {
+  loading(true, 'Generating ' + type + '...');
+  try {
+    const r = await fetch(API + '/exports/' + type);
+    if (!r.ok) throw new Error('Export failed');
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'swiss_invoices.' + (type==='excel'?'xlsx':type==='sap-csv'?'csv':'json');
+    a.click();
+    loading(false); toast('Downloaded!', 'success');
+  } catch(e) { loading(false); toast('Export failed: ' + e.message, 'error'); }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+checkServer();
+setInterval(checkServer, 30000);
+</script>
+</body>
+</html>

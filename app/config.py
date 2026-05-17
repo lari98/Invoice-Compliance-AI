@@ -29,7 +29,12 @@ class Settings(BaseSettings):
     tesseract_cmd: str = ""
     tesseract_languages: str = "deu+fra+ita+eng"
 
-    accepted_currencies: str = "CHF,EUR,USD"
+    # 30 fiat + 5 crypto by default
+    accepted_currencies: str = (
+        "CHF,EUR,USD,GBP,CAD,JPY,SGD,RUB,AUD,AED,CNY,KRW,INR,BRL,HKD,"
+        "NOK,SEK,DKK,NZD,ZAR,TRY,THB,PLN,SAR,MYR,MXN,CZK,HUF,ILS,PHP,"
+        "IDR,TWD,EGP,NGN,UAH,BTC,ETH,USDT,BNB,XRP"
+    )
     api_key: str = "changeme-in-production"
 
     @property

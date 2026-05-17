@@ -11,6 +11,17 @@ def test_health(client):
 def test_root(client):
     r = client.get("/")
     assert r.status_code == 200
+    # Root now serves dashboard.html (HTML) or JSON fallback — accept either
+    ct = r.headers.get("content-type", "")
+    if "text/html" in ct:
+        assert len(r.content) > 0   # non-empty HTML response
+    else:
+        assert "docs" in r.json()   # JSON fallback
+
+
+def test_api_info(client):
+    r = client.get("/api")
+    assert r.status_code == 200
     assert "docs" in r.json()
 
 

@@ -124,20 +124,24 @@ def check_tax_not_gt_total(d: ExtractionResult) -> ComplianceCheckResult:
                 f"Tax ({d.tax_amount:.2f}) exceeds total ({d.total_amount:.2f}) — invalid invoice.",
                 "tax_amount", str(d.tax_amount), f"<= {d.total_amount}",
             )
-    return ComplianceCheckResult("CH_TAX_GT_TOTAL","Tax Not Greater Than Total","tax","pass","Tax amount is within total.")
+    return ComplianceCheckResult("CH_TAX_GT_TOTAL","Tax Not Greater Than Total","tax","pass",
+        "Tax amount is within total.", "tax_amount")
 
 
 def check_suspicious_amount(d: ExtractionResult) -> ComplianceCheckResult:
     """Flag zero totals or perfectly round large amounts as potentially suspicious."""
     if d.total_amount is None:
-        return ComplianceCheckResult("CH_AMOUNT_SUSPICIOUS","Amount Not Suspicious","mandatory","warning","Total amount not found.")
+        return ComplianceCheckResult("CH_AMOUNT_SUSPICIOUS","Amount Not Suspicious","mandatory","warning",
+            "Total amount not found.", "total_amount")
     if d.total_amount == 0:
-        return ComplianceCheckResult("CH_AMOUNT_SUSPICIOUS","Amount Not Suspicious","mandatory","fail","Total amount is zero.")
+        return ComplianceCheckResult("CH_AMOUNT_SUSPICIOUS","Amount Not Suspicious","mandatory","fail",
+            "Total amount is zero.", "total_amount", "0")
     if d.total_amount > 10_000 and d.total_amount == int(d.total_amount) and str(int(d.total_amount)).endswith("000"):
         return ComplianceCheckResult("CH_AMOUNT_SUSPICIOUS","Amount Not Suspicious","mandatory","warning",
             f"Total {d.total_amount:,.2f} is a suspiciously round number. Verify with supporting documents.",
             "total_amount", str(d.total_amount), "non-round value")
-    return ComplianceCheckResult("CH_AMOUNT_SUSPICIOUS","Amount Not Suspicious","mandatory","pass",f"Total {d.total_amount:,.2f} looks reasonable.")
+    return ComplianceCheckResult("CH_AMOUNT_SUSPICIOUS","Amount Not Suspicious","mandatory","pass",
+        f"Total {d.total_amount:,.2f} looks reasonable.", "total_amount", str(d.total_amount))
 
 
 def check_date_order(d: ExtractionResult) -> ComplianceCheckResult:
@@ -148,22 +152,27 @@ def check_date_order(d: ExtractionResult) -> ComplianceCheckResult:
                 f"Invoice date {d.invoice_date} is after due date {d.due_date}.",
                 "invoice_date", str(d.invoice_date), f"<= {d.due_date}")
         return ComplianceCheckResult("CH_DATE_ORDER","Invoice Date Before Due","mandatory","pass",
-            f"Invoice date {d.invoice_date} precedes due date {d.due_date}.")
-    return ComplianceCheckResult("CH_DATE_ORDER","Invoice Date Before Due","mandatory","warning","Cannot verify date order — dates missing.")
+            f"Invoice date {d.invoice_date} precedes due date {d.due_date}.",
+            "invoice_date", str(d.invoice_date))
+    return ComplianceCheckResult("CH_DATE_ORDER","Invoice Date Before Due","mandatory","warning",
+        "Cannot verify date order — dates missing.", "invoice_date")
 
 
 def check_payment_terms(d: ExtractionResult) -> ComplianceCheckResult:
     """Payment terms should be present and reasonable (not > 365 days)."""
     import re as _re
     if not d.payment_terms:
-        return ComplianceCheckResult("CH_PAYMENT_TERMS","Payment Terms Reasonable","mandatory","warning","No payment terms found on invoice.")
+        return ComplianceCheckResult("CH_PAYMENT_TERMS","Payment Terms Reasonable","mandatory","warning",
+            "No payment terms found on invoice.", "payment_terms")
     m = _re.search(r"(\d+)\s*(?:days?|Tage?|jours?|giorni?)", d.payment_terms, _re.I)
     if m:
         days = int(m.group(1))
         if days > 365:
             return ComplianceCheckResult("CH_PAYMENT_TERMS","Payment Terms Reasonable","mandatory","warning",
-                f"Payment term of {days} days exceeds 365 days — unusual.", "payment_terms", d.payment_terms, "<= 365 days")
-    return ComplianceCheckResult("CH_PAYMENT_TERMS","Payment Terms Reasonable","mandatory","pass",f"Payment terms: {d.payment_terms}")
+                f"Payment term of {days} days exceeds 365 days — unusual.",
+                "payment_terms", d.payment_terms, "<= 365 days")
+    return ComplianceCheckResult("CH_PAYMENT_TERMS","Payment Terms Reasonable","mandatory","pass",
+        f"Payment terms: {d.payment_terms}", "payment_terms", d.payment_terms)
 
 
 ALL_RULES = [check_invoice_number, check_vendor_name, check_invoice_date, check_due_date,

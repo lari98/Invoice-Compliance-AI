@@ -20,9 +20,16 @@ RE_SWISS_UID   = re.compile(r"\bCHE[-\s]?\d{3}[.\s]?\d{3}[.\s]?\d{3}\b", re.I)
 RE_IBAN        = re.compile(r"\bCH\d{2}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{1,4}\b", re.I)
 RE_QR_REF      = re.compile(r"\b\d{2}[\s]?\d{5}[\s]?\d{5}[\s]?\d{5}[\s]?\d{5}[\s]?\d{5}\b")
 RE_VAT         = re.compile(r"\b(?:CHE[-\s]?\d{3}[.\s]?\d{3}[.\s]?\d{3}\s*(?:MWST|TVA|IVA)?|DE\d{9})\b", re.I)
-RE_DATE        = re.compile(r"\b(\d{2}[./]\d{2}[./]\d{4}|\d{4}-\d{2}-\d{2})\b")
-RE_AMOUNT      = re.compile(r"(?<!\w)(\d{1,3}(?:['\s]\d{3})*(?:[.,]\d{2})?|\d+(?:[.,]\d{2})?)(?!\w)")
-RE_CURRENCY    = re.compile(r"\b(CHF|EUR|USD|GBP|JPY|SEK|NOK)\b", re.I)
+RE_DATE        = re.compile(
+    r"\b(\d{2}[./]\d{2}[./]\d{4}|\d{4}-\d{2}-\d{2}|"
+    r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+    r"\.?\s+\d{1,2},?\s+\d{4})\b", re.I)
+RE_AMOUNT      = re.compile(r"(?<!\w)(\d{1,3}(?:[,'\s]\d{3})*(?:\.\d{2})?|\d+(?:[.,]\d{2})?)(?!\w)")
+RE_CURRENCY    = re.compile(
+    r"\b(CHF|EUR|USD|GBP|CAD|JPY|SGD|AUD|AED|CNY|KRW|INR|BRL|HKD|NOK|SEK|DKK|NZD|"
+    r"ZAR|TRY|THB|PLN|SAR|MYR|MXN|CZK|HUF|ILS|PHP|IDR|TWD|EGP|NGN|UAH|RUB|"
+    r"BTC|ETH|USDT|BNB|XRP)\b", re.I)
 RE_INV_NUM     = re.compile(
     r"(?:Rechnungs(?:nummer|nr\.?)|Invoice\s*(?:No\.?|Number|#)|"
     r"Num[eé]ro\s+de\s+facture|Facture\s*(?:No\.?|Nr\.?)|"
@@ -36,11 +43,14 @@ RE_TAX_AMOUNT  = re.compile(
     r"(?:MWST|MwSt|TVA|IVA|Tax|VAT)(?![\s-]*Nr)"
     r"[^\n]*?:[ \t]*[A-Za-z ]*"
     r"(\d{1,3}(?:['\s]\d{3})*(?:[.,]\d{2})?)", re.I)
-RE_TOTAL       = re.compile(r"(?:Gesamtbetrag|Total\s*(?:CHF|EUR)?|Montant total|Totale|Grand total|Amount due)[^0-9]*(\d{1,3}(?:['\s]\d{3})*(?:[.,]\d{2})?)", re.I)
+RE_TOTAL       = re.compile(
+    r"(?:Gesamtbetrag|Total\s*(?:CHF|EUR|USD)?|Montant total|Totale|Grand total|Amount due)"
+    r"[^0-9$€£\n]*[$€£]?"
+    r"(\d{1,3}(?:[,'\s]\d{3})*(?:\.\d{2})?|\d+(?:[.,]\d{2})?)", re.I)
 
 INV_DATE_LABELS = ["Rechnungsdatum","Datum","Date de facture","Date","Data fattura","Invoice Date"]
 DUE_DATE_LABELS = ["Fälligkeitsdatum","Fällig","Date d'échéance","Échéance","Due Date","Payment Due"]
-VENDOR_LABELS   = ["Lieferant","Auftragnehmer","Fournisseur","Prestataire","Vendor","Supplier","From"]
+VENDOR_LABELS   = ["Bill From","Lieferant","Auftragnehmer","Fournisseur","Prestataire","Vendor","Supplier","Seller","From"]
 COUNTRY_MAP     = {"Schweiz":"CH","Suisse":"CH","Svizzera":"CH","Switzerland":"CH",
                    "Deutschland":"DE","Germany":"DE","Österreich":"AT","Austria":"AT"}
 
@@ -81,9 +91,19 @@ class ExtractionResult:
 def _clean_amount(raw: str) -> Optional[float]:
     if not raw:
         return None
-    raw = re.sub(r"[CHFEURUSDchfeurusd\s']", "", raw)
+    # Strip currency symbols and letter codes
+    raw = re.sub(r"[$€£¥]", "", raw)
+    raw = re.sub(r"[A-Za-z\s']", "", raw)
+    raw = raw.strip()
+    if not raw:
+        return None
     if "," in raw and "." in raw:
-        raw = raw.replace(".", "").replace(",", ".")
+        # American format: comma=thousands, period=decimal  →  1,234.56
+        # European format: period=thousands, comma=decimal  →  1.234,56
+        if raw.rfind(".") > raw.rfind(","):
+            raw = raw.replace(",", "")          # remove thousands commas
+        else:
+            raw = raw.replace(".", "").replace(",", ".")   # European → standard
     elif "," in raw:
         raw = raw.replace(",", ".")
     try:
@@ -101,13 +121,33 @@ def _normalise_iban(raw: str) -> str:
     return re.sub(r"\s", "", raw).upper()
 
 
+_MONTH_MAP = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
 def _parse_date(raw: str) -> Optional[str]:
     raw = raw.strip()
+    # DD.MM.YYYY  or  DD/MM/YYYY
     m = re.match(r"(\d{2})[./](\d{2})[./](\d{4})", raw)
     if m:
         return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    # YYYY-MM-DD  (already ISO)
     if re.match(r"\d{4}-\d{2}-\d{2}", raw):
         return raw
+    # "May 17, 2026"  or  "May 17 2026"
+    m = re.match(r"([A-Za-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})", raw)
+    if m:
+        mon = _MONTH_MAP.get(m.group(1)[:3].lower())
+        if mon:
+            return f"{m.group(3)}-{mon:02d}-{int(m.group(2)):02d}"
+    # "17 May 2026"
+    m = re.match(r"(\d{1,2})\s+([A-Za-z]+)\.?\s+(\d{4})", raw)
+    if m:
+        mon = _MONTH_MAP.get(m.group(2)[:3].lower())
+        if mon:
+            return f"{m.group(3)}-{mon:02d}-{int(m.group(1)):02d}"
     return raw
 
 
@@ -165,7 +205,18 @@ def extract_fields(raw_text: str) -> ExtractionResult:
     if m: r.vat_number = m.group().strip()
 
     m = RE_CURRENCY.search(text)
-    if m: r.currency = m.group().upper()
+    if m:
+        r.currency = m.group().upper()
+    else:
+        # Detect currency from symbols when no ISO code is written
+        if re.search(r"\$", text):
+            r.currency = "USD"
+        elif re.search(r"€", text):
+            r.currency = "EUR"
+        elif re.search(r"£", text):
+            r.currency = "GBP"
+        elif re.search(r"¥", text):
+            r.currency = "JPY"
 
     m = RE_INV_NUM.search(text)
     if m: r.invoice_number = m.group(1).strip()

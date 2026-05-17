@@ -277,7 +277,7 @@
     <div class="card" style="text-align:center;">
       <div style="font-size:3rem;margin-bottom:1rem;">📊</div>
       <h3>Excel Report</h3>
-      <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.5rem;">4 sheets: Summary, Invoices, Line Items, Compliance Results. Colour-coded status.</p>
+      <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.5rem;">7 sheets: Summary, Invoices, Vendors, Compliance Issues, Anomalies, Manual Review Queue, Line Items.</p>
       <button class="btn btn-success" onclick="doExport('excel')">Download Excel</button>
     </div>
     <div class="card" style="text-align:center;">
@@ -291,6 +291,12 @@
       <h3>Power BI JSON</h3>
       <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.5rem;">Denormalised payload with invoice + compliance + line items. Schema versioned.</p>
       <button class="btn btn-outline" onclick="doExport('powerbi-json')">Download JSON</button>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div style="font-size:3rem;margin-bottom:1rem;">📊</div>
+      <h3>Power BI Excel</h3>
+      <p style="color:var(--muted);font-size:.85rem;margin-bottom:1.5rem;">4 dashboard pages: Executive Overview, Compliance Monitoring, Vendor Risk, Manual Review Queue.</p>
+      <button class="btn btn-primary" onclick="doExport('powerbi-excel')">Download Power BI Excel</button>
     </div>
   </div>
 </div>

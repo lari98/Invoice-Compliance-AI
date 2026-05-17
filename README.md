@@ -1,10 +1,11 @@
 # Swiss Invoice Compliance AI
 
-> **Production-ready AI backend** for Swiss companies — upload invoice PDFs or images, extract all fields via OCR, validate against 12 Swiss legal rules (UID, IBAN, QR-bill, MWST), and export to Excel / SAP / Power BI.
+> **Production-ready AI backend** for Swiss companies — upload invoice PDFs or images, extract all fields via OCR, validate against 16 Swiss compliance rules (UID, IBAN, QR-bill, MWST), detect fraud/anomalies with 8 detectors, and export to Excel / SAP / Power BI.
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110-green)](https://fastapi.tiangolo.com)
-[![Tests](https://img.shields.io/badge/tests-86%20passed-brightgreen)](https://pytest.org)
+[![Tests](https://img.shields.io/badge/tests-150%20passed-brightgreen)](https://pytest.org)
+[![Version](https://img.shields.io/badge/version-1.3.0-orange)](CHANGELOG.md)
 [![SQLite](https://img.shields.io/badge/DB-SQLite%20%2F%20Postgres-lightblue)](https://www.sqlite.org)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
@@ -37,32 +38,43 @@ Swiss companies receive invoices in German, French, Italian, and English from hu
 
 This system automates the entire process:
 
-1. **Receive** — accept PDF or image invoice via REST API upload
-2. **Extract** — run OCR to get raw text, then parse 15+ fields with multilingual regex
-3. **Validate** — run 12 Swiss compliance rules, score each invoice PASS / WARNING / FAIL
-4. **Store** — persist invoice, line items, and compliance results in SQLite (or Postgres)
-5. **Export** — download Excel report, SAP-ready CSV, or Power BI JSON on demand
+1. **Receive** — accept PDF, image, TXT, HTML or Excel invoice via REST API upload
+2. **Extract** — pdfplumber/OCR for text, then parse 15+ fields with multilingual regex (DE/FR/IT/EN); handles `$`, `€`, `£`, US/EU number formats, named-month dates
+3. **Validate** — run **16 Swiss compliance rules**, score each invoice PASS / WARNING / FAIL
+4. **Detect** — run **8 fraud/anomaly detectors** (duplicate invoices, IBAN conflicts, future dates, suspicious amounts …), score 0–100
+5. **Store** — persist invoice, line items, compliance results, and anomaly flags in SQLite (or Postgres)
+6. **Export** — Excel (7 sheets), SAP/ERP CSV, Power BI Excel (4 pages), Power BI JSON
+7. **Dashboard** — full-featured dark UI at `http://localhost:8000` — upload, review, compliance, anomaly, exports
 
 ---
 
 ## Project Plan
 
-The project was built in 8 structured phases:
+The project was built in structured agile sprints:
 
-| Phase | Deliverable | Status |
-|---|---|---|
-| 1 | Project structure, config, environment | ✅ Done |
-| 2 | Database models — Invoice, LineItem, ComplianceResult | ✅ Done |
-| 3 | Pluggable OCR layer (Tesseract / EasyOCR / Mock) | ✅ Done |
-| 4 | Multilingual field extraction engine (15+ fields, 4 languages) | ✅ Done |
-| 5 | Swiss compliance engine (12 rules) | ✅ Done |
-| 6 | FastAPI routers — upload, list, detail, reprocess, delete | ✅ Done |
-| 7 | Export service — Excel, SAP CSV, Power BI JSON | ✅ Done |
-| 8 | Sample data, seed script, 86 unit + integration tests | ✅ Done |
-| 9 | **v1.1** — Fraud/anomaly detection engine (8 rules, score 0-100) | ✅ Done |
-| 10 | **v1.1** — 4 new compliance rules (tax gt total, suspicious amount, date order, payment terms) | ✅ Done |
-| 11 | **v1.1** — 3 new DB tables: anomaly_flags, vendors, uploaded_files | ✅ Done |
-| 12 | **v1.1** — `/invoices/{id}/anomalies` endpoint + 30 new tests | ✅ Done |
+| Phase | Deliverable | Version | Status |
+|---|---|---|---|
+| 1 | Project structure, config, environment | v1.0 | ✅ Done |
+| 2 | Database models — Invoice, LineItem, ComplianceResult | v1.0 | ✅ Done |
+| 3 | Pluggable OCR layer (Tesseract / EasyOCR / Mock / pdfplumber) | v1.0 | ✅ Done |
+| 4 | Multilingual field extraction engine (15+ fields, 4 languages) | v1.0 | ✅ Done |
+| 5 | Swiss compliance engine (12 rules) | v1.0 | ✅ Done |
+| 6 | FastAPI routers — upload, list, detail, reprocess, delete | v1.0 | ✅ Done |
+| 7 | Export service — Excel, SAP CSV, Power BI JSON | v1.0 | ✅ Done |
+| 8 | Sample data, seed script, 86 unit + integration tests | v1.0 | ✅ Done |
+| 9 | Fraud/anomaly detection engine (8 detectors, score 0–100) | v1.1 | ✅ Done |
+| 10 | 4 new compliance rules → 16 total | v1.1 | ✅ Done |
+| 11 | 3 new DB tables: anomaly_flags, vendors, uploaded_files | v1.1 | ✅ Done |
+| 12 | `/invoices/{id}/anomalies` endpoint + anomaly tests | v1.1 | ✅ Done |
+| 13 | Excel export rebuilt — 7 sheets incl. Vendors, Anomalies, Manual Review | v1.2 | ✅ Done |
+| 14 | SAP/ERP CSV — full business + SAP FI columns | v1.2 | ✅ Done |
+| 15 | Power BI Excel — 4 dashboard pages (Executive, Compliance, Vendor Risk, Review) | v1.2 | ✅ Done |
+| 16 | 40 currencies: 35 fiat + BTC ETH USDT BNB XRP | v1.2 | ✅ Done |
+| 17 | Full OpenAPI request/response examples on all endpoints | v1.2 | ✅ Done |
+| 18 | 150 tests — added 19 export service tests | v1.2 | ✅ Done |
+| 19 | Real PDF text extraction via pdfplumber (no Tesseract needed) | v1.3 | ✅ Done |
+| 20 | Field extractor: `$`→USD, US/EU number formats, named-month dates, Bill From | v1.3 | ✅ Done |
+| 21 | Dashboard UI — `http://localhost:8000`, Power BI Excel export card added | v1.3 | ✅ Done |
 
 ---
 

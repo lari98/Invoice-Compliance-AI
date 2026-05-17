@@ -5,13 +5,17 @@ Run:  uvicorn app.main:app --reload --port 8000
 Docs: http://localhost:8000/docs
 """
 
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from loguru import logger
 from app.config import settings
 from app.models.database import init_db
 from app.routers import invoices, compliance, dashboard, exports, anomalies
+
+# Resolve path to dashboard.html at project root (one level above app/)
+_DASHBOARD_HTML = Path(__file__).parent.parent / "dashboard.html"
 
 
 def create_app() -> FastAPI:
@@ -42,8 +46,15 @@ def create_app() -> FastAPI:
     def health():
         return {"status": "ok", "app": settings.app_name, "version": settings.app_version, "ocr_engine": settings.ocr_engine}
 
-    @app.get("/", tags=["System"])
+    @app.get("/", tags=["System"], include_in_schema=False)
     def root():
+        # Serve the dashboard UI if dashboard.html exists at project root
+        if _DASHBOARD_HTML.exists():
+            return FileResponse(str(_DASHBOARD_HTML), media_type="text/html")
+        return JSONResponse({"message": f"Welcome to {settings.app_name}", "docs": "/docs", "health": "/health"})
+
+    @app.get("/api", tags=["System"])
+    def api_info():
         return JSONResponse({"message": f"Welcome to {settings.app_name}", "docs": "/docs", "health": "/health"})
 
     return app

@@ -105,15 +105,72 @@ class EasyOCREngine(BaseOCREngine):
         return " ".join(result)
 
 
+class SmartExtractorEngine(BaseOCREngine):
+    """
+    Reads real file content without Tesseract:
+      - PDF  → pdfplumber (extracts embedded text from digital PDFs)
+      - TXT / HTML / CSV → direct UTF-8 read
+      - Scanned image-only PDF or image file → falls back to MockOCR data
+    Set OCR_ENGINE=auto (or leave unset) in .env to use this engine.
+    """
+
+    @property
+    def engine_name(self) -> str:
+        return "smart"
+
+    def extract_text(self, file_path: str, file_type: str) -> str:
+        path = Path(file_path)
+        ft = (file_type or path.suffix).lower().lstrip(".")
+
+        # ── 1. PDF via pdfplumber ──────────────────────────────────────────
+        if ft == "pdf":
+            try:
+                import pdfplumber
+                with pdfplumber.open(str(path)) as pdf:
+                    pages = [page.extract_text() or "" for page in pdf.pages]
+                text = "\n\n".join(p for p in pages if p.strip())
+                if text.strip():
+                    logger.info(f"pdfplumber extracted {len(text)} chars from {path.name}")
+                    return text
+                logger.warning(f"pdfplumber returned no text from {path.name} (scanned/image PDF — using mock fallback)")
+            except ImportError:
+                logger.warning("pdfplumber not installed. Run: pip install pdfplumber")
+            except Exception as e:
+                logger.warning(f"pdfplumber failed on {path.name}: {e}")
+
+        # ── 2. Plain-text / HTML files ────────────────────────────────────
+        if ft in ("txt", "html", "htm", "csv", "xml"):
+            try:
+                return path.read_text(encoding="utf-8", errors="replace")
+            except Exception as e:
+                logger.warning(f"Could not read text file {path.name}: {e}")
+
+        # ── 3. Sidecar .txt next to image/scanned file ────────────────────
+        sidecar = path.with_suffix(".txt")
+        if sidecar.exists():
+            logger.info(f"Using sidecar .txt for {path.name}")
+            return sidecar.read_text(encoding="utf-8")
+
+        # ── 4. Mock fallback ──────────────────────────────────────────────
+        logger.warning(f"No real text found for {path.name} — returning mock invoice data")
+        if "fr" in path.name.lower():
+            return MockOCREngine.MOCK_FR
+        return MockOCREngine.MOCK_DE
+
+
 def get_ocr_engine(engine: str | None = None) -> BaseOCREngine:
     name = engine or settings.ocr_engine
     if name == "tesseract":
         try:
             return TesseractOCREngine()
         except Exception as e:
-            logger.warning(f"Tesseract unavailable ({e}), falling back to mock.")
-            return MockOCREngine()
+            logger.warning(f"Tesseract unavailable ({e}), falling back to smart extractor.")
+            return SmartExtractorEngine()
     elif name == "easyocr":
         return EasyOCREngine()
-    else:
+    elif name == "mock":
+        # Explicit mock — used in tests
         return MockOCREngine()
+    else:
+        # "auto" or anything else — try real extraction (pdfplumber + text read)
+        return SmartExtractorEngine()

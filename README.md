@@ -59,6 +59,10 @@ The project was built in 8 structured phases:
 | 6 | FastAPI routers — upload, list, detail, reprocess, delete | ✅ Done |
 | 7 | Export service — Excel, SAP CSV, Power BI JSON | ✅ Done |
 | 8 | Sample data, seed script, 86 unit + integration tests | ✅ Done |
+| 9 | **v1.1** — Fraud/anomaly detection engine (8 rules, score 0-100) | ✅ Done |
+| 10 | **v1.1** — 4 new compliance rules (tax gt total, suspicious amount, date order, payment terms) | ✅ Done |
+| 11 | **v1.1** — 3 new DB tables: anomaly_flags, vendors, uploaded_files | ✅ Done |
+| 12 | **v1.1** — `/invoices/{id}/anomalies` endpoint + 30 new tests | ✅ Done |
 
 ---
 
@@ -220,12 +224,69 @@ The engine evaluates 12 rules per invoice, each returning PASS / WARNING / FAIL:
 | `CH_VAT_PRESENT` | tax | VAT / MWST number present | MWSTG Art. 25 |
 | `CH_VAT_RATE` | tax | Rate is valid Swiss rate: 8.1%, 2.6%, 3.8%, or 0% | MWSTG Art. 25 |
 | `CH_TAX_CALC` | tax | Tax amount is consistent with rate × net (±2% tolerance) | MWSTG |
+| `CH_TAX_GT_TOTAL` | tax | Tax amount must not exceed total amount | Accounting |
+| `CH_AMOUNT_SUSPICIOUS` | mandatory | Zero total or suspiciously round large amount | Best practice |
+| `CH_DATE_ORDER` | mandatory | Invoice date must be on or before due date | OR Art. 957a |
+| `CH_PAYMENT_TERMS` | mandatory | Payment terms present and not exceeding 365 days | Best practice |
 
 ### Compliance scoring
 
 - **COMPLIANT** — all mandatory rules PASS
 - **WARNING** — all mandatory rules PASS, at least one optional rule WARNING
 - **NON_COMPLIANT** — at least one mandatory rule FAIL
+
+---
+
+## Fraud & Anomaly Detection (v1.1)
+
+Every invoice is automatically analysed for fraud signals after compliance checking. An **anomaly score (0–100)** is computed from 8 rule-based detectors:
+
+| Detector | Score | Severity | What it catches |
+|---|---|---|---|
+| `DUPLICATE_INVOICE_NUMBER` | 40 | critical | Same invoice number already in the DB |
+| `SAME_IBAN_DIFFERENT_VENDOR` | 35 | critical | Payment redirection — IBAN already belongs to a different vendor |
+| `INVOICE_DATE_FUTURE` | 35 | critical | Invoice date is in the future |
+| `AMOUNT_MISMATCH` | 30 | high | Tax amount exceeds total amount (impossible accounting) |
+| `AMOUNT_UNUSUALLY_HIGH` | 25 | high | Amount is > 3 standard deviations above vendor's historical average |
+| `MISSING_VAT_UID` | 20 | medium | No VAT number or Swiss UID on invoice |
+| `SUSPICIOUS_DUE_DATE` | 15 | medium | Due date is < 3 days or > 365 days after invoice date |
+| `UNUSUAL_CURRENCY` | 10 | low | Currency is not CHF, EUR, or USD |
+
+**Risk levels:** low (0–19) · medium (20–39) · high (40–69) · critical (70–100)
+
+Each flag includes a `description` and a `recommended_action` for the AP team.
+
+### Anomaly API
+
+```
+GET  /invoices/{id}/anomalies        → stored anomaly report + all flags
+POST /invoices/{id}/anomalies/rerun  → re-run detection on existing invoice
+```
+
+Example response:
+```json
+{
+  "invoice_id": 5,
+  "anomaly_score": 75,
+  "risk_level": "critical",
+  "flags": [
+    {
+      "anomaly_type": "SAME_IBAN_DIFFERENT_VENDOR",
+      "severity": "critical",
+      "score_contribution": 35,
+      "description": "IBAN CH56... already used by vendor 'LegitCo AG' (invoice #3).",
+      "recommended_action": "Possible payment redirection fraud. Verify IBAN directly with vendor via phone — not email."
+    },
+    {
+      "anomaly_type": "INVOICE_DATE_FUTURE",
+      "severity": "critical",
+      "score_contribution": 35,
+      "description": "Invoice date 2026-08-15 is in the future (today: 2026-05-17).",
+      "recommended_action": "Reject invoice. Request a corrected invoice with a valid date."
+    }
+  ]
+}
+```
 
 ---
 
@@ -256,6 +317,8 @@ Base URL: `http://localhost:8000` — Interactive docs at `/docs`
 | `GET` | `/invoices/{id}/raw` | Raw OCR text for debugging |
 | `POST` | `/invoices/{id}/reprocess` | Re-run OCR + extraction + compliance on existing file |
 | `DELETE` | `/invoices/{id}` | Delete invoice record and uploaded file |
+| `GET` | `/invoices/{id}/anomalies` | Anomaly report with score and all fraud flags |
+| `POST` | `/invoices/{id}/anomalies/rerun` | Re-run anomaly detection on existing invoice |
 
 ### Compliance
 
@@ -446,8 +509,9 @@ pytest tests/test_compliance_engine.py::TestUID -v
 | File | Tests | What is covered |
 |---|---|---|
 | `test_field_extractor.py` | 45 | Regex patterns, amount/date parsing, language detection, confidence scoring |
-| `test_compliance_engine.py` | 22 | All 12 compliance rules, edge cases, full pipeline run |
+| `test_compliance_engine.py` | 36 | All 16 compliance rules (12 original + 4 v1.1), edge cases, full pipeline run |
 | `test_api.py` | 19 | Upload→extract→comply, list, detail, delete, reprocess, exports, dashboard |
+| `test_anomaly_service.py` | 30 | All 8 anomaly detectors, score calculation, DB persistence, rerun idempotency |
 
 All tests use an in-memory SQLite database with `StaticPool` (no file system side effects).
 

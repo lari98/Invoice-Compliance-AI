@@ -103,3 +103,45 @@ class DashboardStats(BaseModel):
     by_language: dict[str, int]
     top_vendors: list[dict]
     total_amount_chf: Optional[float] = None
+
+
+# ── Anomaly schemas (v1.1) ────────────────────────────────────────────────────
+
+class AnomalyFlagOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: Optional[int] = None
+    invoice_id: int
+    anomaly_type: str
+    severity: str                  # low | medium | high | critical
+    score_contribution: int
+    description: Optional[str] = None
+    recommended_action: Optional[str] = None
+
+
+class AnomalyReportOut(BaseModel):
+    invoice_id: int
+    anomaly_score: int             # 0 – 100
+    risk_level: str                # low | medium | high | critical
+    flags: list[AnomalyFlagOut] = []
+
+
+class VendorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    uid: Optional[str] = None
+    invoice_count: int = 0
+    avg_invoice_amount: float = 0.0
+
+
+class UploadedFileOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    invoice_id: int
+    original_filename: Optional[str] = None
+    stored_filename: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    mime_type: Optional[str] = None

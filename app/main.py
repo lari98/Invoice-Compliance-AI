@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from app.config import settings
 from app.models.database import init_db
-from app.routers import invoices, compliance, dashboard, exports
+from app.routers import invoices, compliance, dashboard, exports, anomalies
 
 
 def create_app() -> FastAPI:
@@ -30,6 +30,7 @@ def create_app() -> FastAPI:
     app.include_router(compliance.router)
     app.include_router(dashboard.router)
     app.include_router(exports.router)
+    app.include_router(anomalies.router)
 
     @app.on_event("startup")
     def on_startup():

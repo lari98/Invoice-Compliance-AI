@@ -57,8 +57,10 @@ class Invoice(Base):
     payment_terms = Column(String(255))
     language = Column(SAEnum(InvoiceLanguage), default=InvoiceLanguage.UNKNOWN)
     extraction_confidence = Column(Float)
+    anomaly_score        = Column(Integer, default=0)
     line_items = relationship("LineItem", back_populates="invoice", cascade="all, delete-orphan")
     compliance_results = relationship("ComplianceResult", back_populates="invoice", cascade="all, delete-orphan")
+    anomaly_flags      = relationship("AnomalyFlag", back_populates="invoice", cascade="all, delete-orphan")
 
     @property
     def overall_compliance_status(self) -> str:
@@ -100,3 +102,49 @@ class ComplianceResult(Base):
     actual_value = Column(String(255))
     expected_pattern = Column(String(255))
     invoice = relationship("Invoice", back_populates="compliance_results")
+
+
+# ── New tables (v1.1) ─────────────────────────────────────────────────────────
+
+class AnomalyFlag(Base):
+    """One row per detected anomaly per invoice."""
+    __tablename__ = "anomaly_flags"
+
+    id                 = Column(Integer, primary_key=True, index=True)
+    invoice_id         = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
+    anomaly_type       = Column(String(80), nullable=False)
+    severity           = Column(String(20), nullable=False)   # low/medium/high/critical
+    score_contribution = Column(Integer, default=0)
+    description        = Column(Text)
+    recommended_action = Column(Text)
+    detected_at        = Column(DateTime, default=datetime.utcnow)
+
+    invoice = relationship("Invoice", back_populates="anomaly_flags")
+
+
+class Vendor(Base):
+    """Vendor registry — built up as invoices are processed."""
+    __tablename__ = "vendors"
+
+    id                  = Column(Integer, primary_key=True, index=True)
+    name                = Column(String(255), unique=True, index=True, nullable=False)
+    uid                 = Column(String(50), nullable=True)
+    known_ibans         = Column(Text, default="[]")   # JSON-serialised list
+    first_seen          = Column(DateTime, default=datetime.utcnow)
+    invoice_count       = Column(Integer, default=0)
+    avg_invoice_amount  = Column(Float, default=0.0)
+
+
+class UploadedFile(Base):
+    """Audit trail of every uploaded file."""
+    __tablename__ = "uploaded_files"
+
+    id                = Column(Integer, primary_key=True, index=True)
+    invoice_id        = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
+    original_filename = Column(String(255))
+    stored_filename   = Column(String(255))
+    file_size_bytes   = Column(Integer)
+    mime_type         = Column(String(100))
+    uploaded_at       = Column(DateTime, default=datetime.utcnow)
+
+    invoice = relationship("Invoice", foreign_keys=[invoice_id])

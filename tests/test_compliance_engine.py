@@ -3,7 +3,8 @@ from app.services.field_extractor import ExtractionResult
 from app.services.compliance_engine import (
     check_swiss_uid, check_iban, check_vat_rate, check_tax_consistency,
     check_qr_reference, check_invoice_number, check_invoice_date, check_due_date,
-    check_currency, check_total_amount, run_compliance_checks, summarise_compliance
+    check_currency, check_total_amount, run_compliance_checks, summarise_compliance,
+    check_tax_not_gt_total, check_suspicious_amount, check_date_order, check_payment_terms,
 )
 
 
@@ -75,4 +76,65 @@ class TestFullRun:
         assert s["failed"] > 0
 
     def test_twelve_rules(self):
-        assert len(run_compliance_checks(make())) == 12
+        assert len(run_compliance_checks(make())) == 16  # 12 original + 4 added in v1.1
+
+
+# ── v1.1 rule tests ───────────────────────────────────────────────────────────
+
+class TestTaxNotGtTotal:
+    def test_tax_within_total(self):
+        assert check_tax_not_gt_total(make(tax_amount=100.0, total_amount=1000.0)).status == "pass"
+
+    def test_tax_equals_total(self):
+        assert check_tax_not_gt_total(make(tax_amount=100.0, total_amount=100.0)).status == "pass"
+
+    def test_tax_exceeds_total(self):
+        assert check_tax_not_gt_total(make(tax_amount=500.0, total_amount=100.0)).status == "fail"
+
+    def test_missing_amounts_pass(self):
+        assert check_tax_not_gt_total(make(tax_amount=None, total_amount=None)).status == "pass"
+
+
+class TestSuspiciousAmount:
+    def test_normal_amount_ok(self):
+        assert check_suspicious_amount(make(total_amount=1234.56)).status == "pass"
+
+    def test_zero_amount_fail(self):
+        assert check_suspicious_amount(make(total_amount=0.0)).status == "fail"
+
+    def test_round_large_amount_warning(self):
+        r = check_suspicious_amount(make(total_amount=50000.0))
+        assert r.status == "warning"
+
+    def test_missing_amount_warning(self):
+        assert check_suspicious_amount(make(total_amount=None)).status == "warning"
+
+
+class TestDateOrder:
+    def test_invoice_before_due(self):
+        from datetime import date
+        r = check_date_order(make(invoice_date=date(2024, 1, 1), due_date=date(2024, 2, 1)))
+        assert r.status == "pass"
+
+    def test_invoice_after_due(self):
+        from datetime import date
+        r = check_date_order(make(invoice_date=date(2024, 3, 1), due_date=date(2024, 1, 1)))
+        assert r.status == "fail"
+
+    def test_missing_dates_warning(self):
+        assert check_date_order(make(invoice_date=None, due_date=None)).status == "warning"
+
+
+class TestPaymentTerms:
+    def test_standard_30_days(self):
+        assert check_payment_terms(make(payment_terms="30 days net")).status == "pass"
+
+    def test_missing_terms_warning(self):
+        assert check_payment_terms(make(payment_terms=None)).status == "warning"
+
+    def test_excessive_term_warning(self):
+        r = check_payment_terms(make(payment_terms="730 days net"))
+        assert r.status == "warning"
+
+    def test_german_tage(self):
+        assert check_payment_terms(make(payment_terms="14 Tage netto")).status == "pass"

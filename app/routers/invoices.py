@@ -8,6 +8,7 @@ from app.services.ocr_service import get_ocr_engine
 from app.services.field_extractor import extract_fields
 from app.services.compliance_engine import run_compliance_checks
 from app.utils.file_handler import validate_upload, save_upload, delete_upload
+from app.services.anomaly_service import run_anomaly_detection
 
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 LANG_MAP   = {"de": InvoiceLanguage.DE, "fr": InvoiceLanguage.FR, "it": InvoiceLanguage.IT, "en": InvoiceLanguage.EN}
@@ -52,6 +53,11 @@ def _process_invoice(invoice_id: int, db: Session):
                                     category=cr.category, status=STATUS_MAP.get(cr.status, ComplianceStatus.UNKNOWN),
                                     message=cr.message, field_checked=cr.field_checked,
                                     actual_value=cr.actual_value, expected_pattern=cr.expected_pattern))
+        # Anomaly detection (v1.1)
+        try:
+            run_anomaly_detection(invoice, ex, db)
+        except Exception as ae:
+            logger.warning(f"Anomaly detection for invoice {invoice_id} failed (non-fatal): {ae}")
         invoice.status = ProcessingStatus.COMPLETED
         db.commit()
         logger.info(f"Invoice {invoice_id} processed OK.")

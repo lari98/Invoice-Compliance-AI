@@ -4,7 +4,7 @@ from fastapi import UploadFile, HTTPException
 from loguru import logger
 from app.config import settings
 
-ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg"}
+ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "txt", "html", "htm", "xlsx", "xls"}
 
 
 def get_file_extension(filename: str) -> str:

@@ -1,5 +1,5 @@
 """
-Invoices router — v1.2
+Invoices router — v1.5
 Endpoints with full OpenAPI request/response examples.
 """
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, BackgroundTasks
@@ -26,8 +26,6 @@ STATUS_MAP = {"pass": ComplianceStatus.PASS, "fail": ComplianceStatus.FAIL,
                "warning": ComplianceStatus.WARNING}
 
 
-# ── Core processing pipeline ──────────────────────────────────────────────────
-
 def _process_invoice(invoice_id: int, db: Session):
     invoice = db.get(Invoice, invoice_id)
     if not invoice:
@@ -41,26 +39,27 @@ def _process_invoice(invoice_id: int, db: Session):
             file_path=str(invoice.file_path),
             file_type=invoice.file_type or "pdf",
         )
-        invoice.raw_text       = raw_text
+        # Guarantee raw_text is never stored as None
+        invoice.raw_text        = raw_text.strip() if raw_text else "(OCR returned no text)"
         invoice.ocr_engine_used = engine.engine_name
 
-        ex = extract_fields(raw_text)
-        invoice.invoice_number       = ex.invoice_number
-        invoice.vendor_name          = ex.vendor_name
-        invoice.vendor_country       = ex.vendor_country
-        invoice.vat_number           = ex.vat_number
-        invoice.swiss_uid            = ex.swiss_uid
-        invoice.iban                 = ex.iban
-        invoice.qr_reference         = ex.qr_reference
-        invoice.currency             = ex.currency
-        invoice.total_amount         = ex.total_amount
-        invoice.tax_amount           = ex.tax_amount
-        invoice.tax_rate_percent     = ex.tax_rate_percent
-        invoice.invoice_date         = ex.invoice_date
-        invoice.due_date             = ex.due_date
-        invoice.payment_terms        = ex.payment_terms
+        ex = extract_fields(raw_text or "")
+        invoice.invoice_number        = ex.invoice_number
+        invoice.vendor_name           = ex.vendor_name
+        invoice.vendor_country        = ex.vendor_country
+        invoice.vat_number            = ex.vat_number
+        invoice.swiss_uid             = ex.swiss_uid
+        invoice.iban                  = ex.iban
+        invoice.qr_reference          = ex.qr_reference
+        invoice.currency              = ex.currency
+        invoice.total_amount          = ex.total_amount
+        invoice.tax_amount            = ex.tax_amount
+        invoice.tax_rate_percent      = ex.tax_rate_percent
+        invoice.invoice_date          = ex.invoice_date
+        invoice.due_date              = ex.due_date
+        invoice.payment_terms         = ex.payment_terms
         invoice.extraction_confidence = ex.extraction_confidence
-        invoice.language             = LANG_MAP.get(ex.language, InvoiceLanguage.UNKNOWN)
+        invoice.language              = LANG_MAP.get(ex.language, InvoiceLanguage.UNKNOWN)
 
         db.query(LineItem).filter(LineItem.invoice_id == invoice_id).delete()
         for li in ex.line_items:
@@ -80,7 +79,6 @@ def _process_invoice(invoice_id: int, db: Session):
                 actual_value=cr.actual_value, expected_pattern=cr.expected_pattern,
             ))
 
-        # Anomaly detection (v1.1) — non-fatal
         try:
             run_anomaly_detection(invoice, ex, db)
         except Exception as ae:
@@ -91,49 +89,16 @@ def _process_invoice(invoice_id: int, db: Session):
         logger.info(f"Invoice {invoice_id} processed OK.")
     except Exception as exc:
         logger.error(f"Invoice {invoice_id} failed: {exc}")
-        invoice.status          = ProcessingStatus.FAILED
+        invoice.status           = ProcessingStatus.FAILED
         invoice.processing_error = str(exc)
         db.commit()
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
-
-@router.post(
-    "/upload",
-    response_model=UploadResponse,
-    status_code=201,
-    summary="Upload and process an invoice",
-    description="""
-Upload an invoice file (PDF, JPG, PNG, TXT, HTML, XLSX). The system will:
-
-1. Save the file to the upload directory
-2. Extract text via OCR / pdfplumber (digital PDFs need no Tesseract)
-3. Extract structured fields (vendor, IBAN, amounts, dates …)
-4. Run **16 Swiss compliance rules**
-5. Run **8 anomaly/fraud detectors**
-
-**Accepted file types:** PDF, JPG, JPEG, PNG, TXT, HTML, XLSX, XLS
-
-**Request example (curl):**
-```bash
-curl -X POST http://localhost:8000/invoices/upload \\
-  -F "file=@invoice.pdf"
-```
-
-**Response example:**
-```json
-{
-  "invoice_id": 42,
-  "filename": "invoice.pdf",
-  "message": "Invoice uploaded and processed.",
-  "status": "completed"
-}
-```
-""",
-)
+@router.post("/upload", response_model=UploadResponse, status_code=201,
+             summary="Upload and process an invoice")
 async def upload_invoice(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(..., description="Invoice file — PDF, JPG, PNG, TXT, HTML, XLSX"),
+    file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
     ext     = validate_upload(file)
@@ -155,54 +120,13 @@ async def upload_invoice(
     )
 
 
-@router.get(
-    "/",
-    response_model=list[InvoiceSummary],
-    summary="List all invoices",
-    description="""
-Returns a paginated list of invoice summaries.
-
-**Query parameters:**
-- `skip` — offset for pagination (default 0)
-- `limit` — max results (default 50, max 200)
-- `status` — filter by processing status: `pending | processing | completed | failed`
-- `language` — filter by detected language: `de | fr | it | en | unknown`
-
-**Request examples:**
-```
-GET /invoices/
-GET /invoices/?skip=0&limit=20
-GET /invoices/?status=completed&language=de
-```
-
-**Response example:**
-```json
-[
-  {
-    "id": 1,
-    "original_filename": "rechnung_2024.pdf",
-    "invoice_number": "INV-2024-001247",
-    "vendor_name": "Mustermann Beratung AG",
-    "currency": "CHF",
-    "total_amount": 3729.45,
-    "invoice_date": "2024-03-15",
-    "status": "completed",
-    "language": "de",
-    "overall_compliance_status": "pass",
-    "created_at": "2024-03-15T10:30:00"
-  }
-]
-```
-""",
-)
+@router.get("/", response_model=list[InvoiceSummary], summary="List all invoices")
 def list_invoices(
-    skip: int     = Query(0, ge=0, description="Number of records to skip"),
-    limit: int    = Query(50, ge=1, le=200, description="Max records to return"),
-    status: str | None   = Query(None, examples=["completed"],
-                                  description="Filter by status: pending|processing|completed|failed"),
-    language: str | None = Query(None, examples=["de"],
-                                  description="Filter by language: de|fr|it|en|unknown"),
-    db: Session = Depends(get_db),
+    skip: int            = Query(0, ge=0),
+    limit: int           = Query(50, ge=1, le=200),
+    status: str | None   = Query(None),
+    language: str | None = Query(None),
+    db: Session          = Depends(get_db),
 ):
     q = db.query(Invoice)
     if status:   q = q.filter(Invoice.status   == status)
@@ -210,42 +134,7 @@ def list_invoices(
     return q.order_by(Invoice.created_at.desc()).offset(skip).limit(limit).all()
 
 
-@router.get(
-    "/{invoice_id}",
-    response_model=InvoiceOut,
-    summary="Get full invoice detail",
-    description="""
-Returns the complete invoice record including extracted fields, all compliance
-rule results, and anomaly flags.
-
-**Response example:**
-```json
-{
-  "id": 1,
-  "invoice_number": "INV-2024-001247",
-  "vendor_name": "Mustermann Beratung AG",
-  "currency": "CHF",
-  "total_amount": 3729.45,
-  "tax_amount": 279.45,
-  "tax_rate_percent": 8.1,
-  "invoice_date": "2024-03-15",
-  "due_date": "2024-04-15",
-  "swiss_uid": "CHE-123.456.789",
-  "iban": "CH56 0483 5012 3456 7800 9",
-  "overall_compliance_status": "pass",
-  "compliance_results": [
-    {
-      "rule_id": "CH_UID_FORMAT",
-      "rule_name": "Swiss UID Format",
-      "status": "pass",
-      "message": "UID format is valid"
-    }
-  ],
-  "line_items": []
-}
-```
-""",
-)
+@router.get("/{invoice_id}", response_model=InvoiceOut, summary="Get full invoice detail")
 def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
     inv = db.get(Invoice, invoice_id)
     if not inv:
@@ -253,22 +142,7 @@ def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
     return inv
 
 
-@router.get(
-    "/{invoice_id}/raw",
-    summary="Get raw OCR text",
-    description="""
-Returns the raw text extracted from the invoice file — useful for debugging
-OCR quality or checking what the field extractor received.
-
-**Response example:**
-```json
-{
-  "invoice_id": 1,
-  "raw_text": "RECHNUNG\\nRechnungsnummer: INV-2024-001247\\n..."
-}
-```
-""",
-)
+@router.get("/{invoice_id}/raw", summary="Get raw OCR text")
 def get_raw_text(invoice_id: int, db: Session = Depends(get_db)):
     inv = db.get(Invoice, invoice_id)
     if not inv:
@@ -276,25 +150,8 @@ def get_raw_text(invoice_id: int, db: Session = Depends(get_db)):
     return {"invoice_id": invoice_id, "raw_text": inv.raw_text}
 
 
-@router.post(
-    "/{invoice_id}/reprocess",
-    response_model=UploadResponse,
-    summary="Reprocess an existing invoice",
-    description="""
-Re-runs the full processing pipeline on an already-uploaded invoice —
-useful after updating OCR settings or compliance rules.
-
-**Response example:**
-```json
-{
-  "invoice_id": 1,
-  "filename": "rechnung.pdf",
-  "message": "Reprocessed.",
-  "status": "completed"
-}
-```
-""",
-)
+@router.post("/{invoice_id}/reprocess", response_model=UploadResponse,
+             summary="Reprocess an existing invoice")
 def reprocess(invoice_id: int, db: Session = Depends(get_db)):
     inv = db.get(Invoice, invoice_id)
     if not inv:
@@ -307,21 +164,7 @@ def reprocess(invoice_id: int, db: Session = Depends(get_db)):
     )
 
 
-@router.delete(
-    "/{invoice_id}",
-    status_code=204,
-    summary="Delete an invoice",
-    description="""
-Permanently deletes the invoice record and its uploaded file.
-
-Returns HTTP **204 No Content** on success.
-
-**Request example:**
-```
-DELETE /invoices/5
-```
-""",
-)
+@router.delete("/{invoice_id}", status_code=204, summary="Delete an invoice")
 def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
     inv = db.get(Invoice, invoice_id)
     if not inv:

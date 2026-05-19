@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Swiss Invoice Compliance AI"
-    app_version: str = "1.4.0"
+    app_version: str = "1.5.0"
     debug: bool = False
 
     database_url: str = "sqlite:///./swiss_invoices.db"
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     export_dir: Path = Path("./exports")
     max_upload_size_mb: int = 20
 
-    ocr_engine: str = "auto"
+    ocr_engine: str = "enterprise"
     tesseract_cmd: str = ""
     tesseract_languages: str = "deu+fra+ita+eng"
 
